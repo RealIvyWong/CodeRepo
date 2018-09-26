@@ -24,7 +24,6 @@ def useapi(img):
     response = requests.post(http_url, data=data, files=files)
     req_con = response.content.decode('utf-8')
     req_dict = JSONDecoder().decode(req_con)
-    print(req_dict)
     return req_dict
 
 
