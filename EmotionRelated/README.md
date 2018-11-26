@@ -10,7 +10,7 @@
 
 写出来的数据库应该是下图这样的
 
-![1543230617259](D:\10GitRepository\CodeRepo\EmotionRelated\assets\1543230617259.png)
+![1543230617259](https://github.com/RealIvyWong/CodeRepo/raw/master/EmotionRelated/assets/1543230617259.png)
 
 ## GroupTag_localphoto.py
 
@@ -18,7 +18,7 @@
 
 大概的运行场景如下图所示（当然还是推荐使用pycharm，不然可能会存在输入光标不会保持在命令行中的情况）
 
-![1543230820411](D:\10GitRepository\CodeRepo\EmotionRelated\assets\1543230820411.png)
+![1543230820411](https://github.com/RealIvyWong/CodeRepo/raw/master/EmotionRelated/assets/1543230820411.png)
 
 
 
@@ -28,11 +28,11 @@
 
 运行情况大概如下图所示
 
-![1543238320038](D:\10GitRepository\CodeRepo\EmotionRelated\assets\1543238320038.png)
+![1543238320038](https://github.com/RealIvyWong/CodeRepo/raw/master/EmotionRelated/assets/1543238320038.png)
 
 生成的数据库大概是下图这样
 
-![1543238406149](D:\10GitRepository\CodeRepo\EmotionRelated\assets\1543238406149.png)
+![1543238406149](https://github.com/RealIvyWong/CodeRepo/raw/master/EmotionRelated/assets/1543238406149.png)
 
 ## WeiboEmotion
 
