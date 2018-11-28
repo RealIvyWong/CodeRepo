@@ -10,8 +10,8 @@ import pandas
 
 
 if __name__ == '__main__':
-    emailname='924154233@qq.com'
-    emailpassword='atongmu100533'
+    emailname=None
+    emailpassword=None
     # 登录你的邮箱
     yag = yagmail.SMTP(user = emailname, password = emailpassword, host = 'smtp.qq.com')
 
@@ -38,5 +38,5 @@ if __name__ == '__main__':
         print(' time cost ',time_end-time_start,'s')
 
         print('***********************休息三小时再继续爬********************')
-        yag.send(to = ['924154233@qq.com'], subject = 'All Done', contents = ['这一段时间的都爬完了，三个小时后继续。耗时%s秒'%str(time_end-time_start)])
+        yag.send(to = [emailname], subject = 'All Done', contents = ['这一段时间的都爬完了，三个小时后继续。耗时%s秒'%str(time_end-time_start)])
         time.sleep(10800) #设置3个小时执行一次

@@ -156,8 +156,8 @@ def writedb(tweets,page):
 def main(row,ippool):
 
     # 自主设置区
-    emailname='924154233@qq.com'
-    emailpassword='atongmu100533'
+    emailname=None
+    emailpassword=None
 
     global conn,cur,place,pid
 
