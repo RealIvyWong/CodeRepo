@@ -17,10 +17,30 @@ import urllib.error
 import pandas
 import yagmail
 
-http_url = 'https://api-cn.faceplusplus.com/facepp/v3/detect'
 
+# 自主设置区
+
+# face++的api key和secret
 key = 'TmBJ_UuRJyow1PWIjH6iIA3_25a_CIvp'
 secret = 'DndanQWy_q2ZIp7iMjMCSIkmdJU6V3Tl'
+# 电子邮件的账号密码
+email=None
+emailpassword=None
+# 数据库路径
+emotion_db='emotion.sqlite'
+photo_db='photo.sqlite'
+
+# 一些预操作
+# API的请求url
+http_url = 'https://api-cn.faceplusplus.com/facepp/v3/detect'
+# 登录你的邮箱
+yag = yagmail.SMTP(user = email, password = emailpassword,host = 'smtp.qq.com')
+# 连接数据库
+conn1 = sqlite3.connect(emotion_db)
+cur1 = conn1.cursor()
+conn2 = sqlite3.connect(photo_db)
+cur2 = conn2.cursor()
+print('数据库连接成功!')
 
 
 # 使用face++的api识别情绪
@@ -191,17 +211,7 @@ def createtable():
     conn1.commit()
 
 def main():
-    global conn1,cur1,conn2,cur2,yag
 
-    # 登录你的邮箱
-    yag = yagmail.SMTP(user = '924154233@qq.com', password = 'atongmu100533', host = 'smtp.qq.com')
-
-    # 连接数据库
-    conn1 = sqlite3.connect('emotion.sqlite')
-    cur1 = conn1.cursor()
-    conn2 = sqlite3.connect('photo.sqlite')
-    cur2 = conn2.cursor()
-    print('数据库连接成功!')
 
     # 初始化数据库
     createtable()
@@ -239,7 +249,7 @@ def main():
         print('第%s张已经成功检测并写入'%str(i))
 
     print('所有的照片情绪都识别完了!')
-    yag.send(to = ['924154233@qq.com'], subject = '情绪识别完毕', contents = ['本地所有的照片情绪都识别完了。'])
+    yag.send(to = [email], subject = '情绪识别完毕', contents = ['本地所有的照片情绪都识别完了。'])
 
     # 关闭数据库
     cur1.close()
@@ -255,4 +265,4 @@ if __name__ == '__main__':
 
         # 要是报错了，就发邮件然后退出
         print(e)
-        yag.send(to = ['924154233@qq.com'], subject = '本地情绪识别 Break!!!!!', contents = [e])
+        yag.send(to = [email], subject = '本地情绪识别 Break!!!!!', contents = [e])

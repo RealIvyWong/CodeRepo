@@ -141,7 +141,7 @@ def connectsql():
 if __name__ == '__main__':
     try:
         # 登录你的邮箱
-        yag = yagmail.SMTP(user = '924154233@qq.com', password = 'atongmu100533', host = 'smtp.qq.com')
+        yag = yagmail.SMTP(user = 'your email', password = 'your password', host = 'smtp.qq.com')
 
         conn, cursor = connectsql()
         # 获取数据库中的表名
@@ -213,5 +213,5 @@ if __name__ == '__main__':
     except Exception as e:
         print(e)
         # 要是报错了，就发邮件然后退出
-        yag.send(to = ['924154233@qq.com'], subject = 'Break!!!!!', contents = ['table done!'])
+        yag.send(to = ['接受邮箱'], subject = 'Break!!!!!', contents = [''])
         sys.exit(1)

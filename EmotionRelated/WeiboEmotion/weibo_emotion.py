@@ -2,17 +2,56 @@
 # version:python3.7
 # author:Ivy
 
+import requests
 import json
-import sqlite3
+import pandas, sqlite3
+import yagmail
+from PIL import Image
+import exifread
 import time
 import traceback
-# 需要额外安装的包
-import yagmail
-import pandas
+
 from PythonSDK.facepp import API
 
 
-# 使用face++的api识别情绪
+# 自主设置区
+
+# face++的api key和secret
+API_KEY = 'TmBJ_UuRJyow1PWIjH6iIA3_25a_CIvp'
+API_SECRET = 'DndanQWy_q2ZIp7iMjMCSIkmdJU6V3Tl'
+# 电子邮件的账号密码
+email=None
+emailpassword=None
+# 数据库路径
+emotion_db='emotion.sqlite'
+weibo_db='weibo.sqlite'
+
+# 一些预操作
+# 创建使用facepp的实例
+api=API(API_KEY,API_SECRET)
+# 登录你的邮箱
+yag = yagmail.SMTP(user = email, password = emailpassword,host = 'smtp.qq.com')
+# 连接数据库
+conn1 = sqlite3.connect(emotion_db)
+cur1 = conn1.cursor()
+conn2 = sqlite3.connect(weibo_db)
+cur2 = conn2.cursor()
+print('数据库连接成功!')
+
+# 获取图片大小并判断是否符合要求
+def wrongsize(img):
+    img2 = Image.open(img)
+    w, h = img2.size
+    # API对图片大小的限制
+    if w < 48 or h < 48:
+        print('图片太小了！跳过！')
+        return 0
+    elif w > 4096 or h > 4096:
+        print('图片太大了！换小点的图片！')
+        return 1
+    else:
+        return 2
+
 def useapi(url):
     try:
         parsed = api.detect(image_url=url, return_attributes="gender,age,emotion,beauty,smiling,ethnicity,skinstatus")
@@ -22,7 +61,8 @@ def useapi(url):
             if 'CONCURRENCY_LIMIT_EXCEEDED' in eval(e.body.decode())['error_message']:
                 print('并发数超过限制')
                 time.sleep(3)
-                useapi(url)
+                parsed = useapi(url)
+                return parsed
         elif e.code==400:
             if 'IMAGE_FILE_TOO_LARGE' in eval(e.body.decode())['error_message']:
                 print('图片太大，请更换')
@@ -52,6 +92,7 @@ def useapi(url):
 def detectface(row):
     url=row['img_large']
     parsed=useapi(url)
+    print(parsed)
     if parsed == 1:
         url=row['img']
         parsed=useapi(url)
@@ -143,13 +184,22 @@ def getinfo(row):
         h = int(ct_list[0])
         min = int(ct_list[1])
         s = int(t_list[5])
+    elif ct=='刚刚':
+        y = int(t_list[0])
+        mon = int(t_list[1])
+        d = int(t_list[2])
+        h = int(t_list[0])
+        min = int(t_list[1])
+        s = int(t_list[5])
     else:
         # 暂时还想不到有什么其他情况
+        print('time: ',t,'create time:',ct)
         pass
 
     daystamp=str(y)+'-'+str(mon)+'-'+str(d)
     timestamp=str(h)+':'+str(min)+':'+str(s)
     hourstamp = h + min / 60.0 + s / 3600.0
+
     return place, daystamp, timestamp, hourstamp
 
 
@@ -240,22 +290,6 @@ def createtable():
     conn1.commit()
 
 def main():
-    global conn1,cur1,conn2,cur2,api,yag
-    # 创建使用facepp的实例
-    API_KEY = 'TmBJ_UuRJyow1PWIjH6iIA3_25a_CIvp'
-    API_SECRET = 'DndanQWy_q2ZIp7iMjMCSIkmdJU6V3Tl'
-
-    api=API(API_KEY,API_SECRET)
-    # 登录你的邮箱
-    yag = yagmail.SMTP(user = '924154233@qq.com', password = 'atongmu100533', host = 'smtp.qq.com')
-
-
-    # 连接数据库
-    conn1 = sqlite3.connect('emotion.sqlite')
-    cur1 = conn1.cursor()
-    conn2 = sqlite3.connect('weibo.sqlite')
-    cur2 = conn2.cursor()
-    print('数据库连接成功!')
 
     # 初始化数据库
     createtable()
@@ -289,13 +323,17 @@ def main():
         # 判断图片格式
         if temp_row['img'][-3:] == 'gif':
             print('图片格式不对，跳过')
+            print(temp_row['img'])
+            ins2="INSERT INTO pic_id VALUES (null, '%s')"%row['pid']
+            cur1.execute(ins2)
+            conn1.commit()
             continue
 
         detectface(temp_row)
         print('第%s张已经成功检测并写入'%str(i))
 
     print('目前所有的照片情绪都识别完了，休息三个小时再继续。')
-    yag.send(to = ['924154233@qq.com'], subject = '情绪识别完毕', contents = ['目前所有的照片情绪都识别完了，休息三个小时再继续。'])
+    yag.send(to = [email], subject = '情绪识别完毕', contents = ['目前所有的照片情绪都识别完了，休息三个小时再继续。'])
 
     # 关闭数据库
     cur1.close()
@@ -317,6 +355,6 @@ if __name__ == '__main__':
 
             # 要是报错了，就发邮件然后退出
             print(e)
-            yag.send(to = ['924154233@qq.com'], subject = '情绪识别 Break!!!!!', contents = [e])
+            yag.send(to = [email], subject = '情绪识别 Break!!!!!', contents = [e])
 
             break
