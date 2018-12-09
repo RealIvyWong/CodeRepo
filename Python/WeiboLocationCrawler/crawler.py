@@ -9,7 +9,6 @@ import re
 import time
 import sqlite3, pandas
 import random
-import yagmail
 import traceback
 import threading
 
@@ -80,6 +79,10 @@ def get_tweets(URL,page,ippool):
             print('代理有问题呀，换个ip试试')
             continue
 
+        if (jd['ok']==0) and ("这里还没有内容" in str(jd)):
+            print(jd)
+            return 0
+
         if jd['ok']==0:
             print('获取地点的页面失败啊，换个ip试试')
         else:
@@ -99,7 +102,6 @@ def get_tweets(URL,page,ippool):
 def writedb(tweets,page):
     # 遍历每条微博
     for tweet in tweets:
-
         # 整理微博表的数据
         temp = [0 for i in range(11)]  # 初始化一行，一共有11列
 
@@ -153,14 +155,9 @@ def writedb(tweets,page):
             #print('Page',page,' %s 这条微博的图片也写进图片表啦'%temp[0])
 
 
-def main(row,ippool):
-
-    # 自主设置区
-    emailname=None
-    emailpassword=None
+def main(row,ippool,yag,emailname):
 
     global conn,cur,place,pid
-
 
     # 读取资料文档
     f=pandas.read_csv("pid.csv")
@@ -170,9 +167,6 @@ def main(row,ippool):
     # 连接数据库
     conn = sqlite3.connect('weibo.sqlite',check_same_thread=False)
     cur = conn.cursor()
-
-    # 登录你的邮箱
-    yag = yagmail.SMTP(user = emailname, password = emailpassword, host = 'smtp.qq.com')
 
     # 初始化数据库，如果已经存在了就接着爬就好了
     try:
@@ -188,7 +182,8 @@ def main(row,ippool):
         time_start=time.time()
 
         # 爬150页微博
-        for page in range(1,151):
+        page=1
+        while True:
             print('开始爬',place,'第',page,'页')
 
             # 获取当前时间
@@ -196,22 +191,34 @@ def main(row,ippool):
             current_time = time.strftime('%Y-%m-%d-%H-%M-%S',time.localtime(time.time()))
             # 获取一个页面的所有内容，json格式
             tweets = get_tweets(URL,page,ippool)
+
+            #判断是不是到底了
+            if "周边值得去" in str(tweets):
+                print('爬到底了！')
+                break
+
+            if tweets==0:
+                print('已经到第',page,'页了，没有内容了')
+                break
+
             # 写入数据库
             writedb(tweets,page)
+
+
             print(place,' 第',page,'页爬完了！')
+            page+=1
 
         time_end=time.time()
         print(place,' time cost ',time_end-time_start,'s')
 
         print('******************%s的微博爬完了*******************************'%place)
-        yag.send(to = ['924154233@qq.com'], subject = place+' Done', contents = ['耗时%s秒'%str(time_end-time_start)])
 
 
     except:
         e = traceback.format_exc()
         # 要是报错了，就发邮件然后退出
         print(e)
-        yag.send(to = ['924154233@qq.com'], subject = place+' Break!!!!!', contents = [e])
+        yag.send(to = [emailname], subject = place+' Break!!!!!', contents = [e])
 
     finally:
         #关闭数据库
