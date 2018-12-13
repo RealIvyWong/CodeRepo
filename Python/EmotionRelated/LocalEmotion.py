@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
-# version:python3.6.6
+# version:python3.7
 # author:Ivy Wong
 
-# 本循环是对一个大文件夹内的多个小文件夹中的图片进行识别，每个小文件夹为一个csv文件
-# 也就是说有两级文件夹目录
-# 注意，路径与文件名都不要有中文
+# 访问face++的api，把照片数据库里的照片每张都放进情绪数据库
 
 # 导入相关模块
 import time, os

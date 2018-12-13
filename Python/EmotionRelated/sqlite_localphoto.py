@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
-# version:python3.7.0
+# version:python3.7
 # author:Ivy Wong
+
+# 这个程序用来将第一级目录下所有第二级目录里的图片写入照片数据库
 
 import sys
 import os.path
@@ -12,6 +14,10 @@ import math
 import exifread
 from PIL import Image
 
+# 自己设置区
+path = "D:/emotionrawdata/urban" # 第一级目录
+threshold_size = 2 # 设置最大的图片大小，单位为M
+db_path = 'photo.sqlite'
 
 def uploadimg(folder,filename,photo,photo_resize):
     try:
@@ -102,10 +108,6 @@ def resize_images(img):
 
 
 if  __name__ == '__main__':
-    # 自己设置区
-    path = "D:/emotionrawdata/urban" # 第一级目录
-    threshold_size = 2 # 设置最大的图片大小，单位为M
-    db_path = 'photo.sqlite'
 
     # 连接数据库
     conn = sqlite3.connect(db_path)
