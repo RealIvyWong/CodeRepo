@@ -1,78 +1,194 @@
-# -*- coding: utf-8 -*-
-# version:python3.7.0
-# author:Ivy Wong
+# coding:utf-8
+# version:python3.7
+# author:Ivy
 
-# 用来识别云数据库中的图片的情绪
-# 还不成熟，以后再改
-
-# 导入相关模块
 import requests
-import pymysql
-import sys
-import csv
-from json import JSONDecoder
-from PIL import Image
-import random
+import json
+import pandas, sqlite3
 import yagmail
-import io
+from PIL import Image
 import exifread
+import time
+import traceback
 
-# 使用face++的api识别情绪
-def useapi(img):
-    http_url = "https://api-cn.faceplusplus.com/facepp/v3/detect"
+from PythonSDK.facepp import API
 
-    proxy_url=random_ip()
 
-    data = {"api_key":"TmBJ_UuRJyow1PWIjH6iIA3_25a_CIvp",
-            "api_secret":"DndanQWy_q2ZIp7iMjMCSIkmdJU6V3Tl",
-            "return_attributes": "gender,age,emotion,beauty,smiling,ethnicity,skinstatus"}
-    files = {"image_file":img}
-    response = requests.post(http_url, data=data, files=files, proxies=proxy_url)
-    req_con = response.content.decode('utf-8')
-    req_dict = JSONDecoder().decode(req_con)
-    return req_dict
+# 获取图片大小并判断是否符合要求
+def wrongsize(img):
+    img2 = Image.open(img)
+    w, h = img2.size
+    # API对图片大小的限制
+    if w < 48 or h < 48:
+        print('图片太小了！跳过！')
+        return 0
+    elif w > 4096 or h > 4096:
+        print('图片太大了！换小点的图片！')
+        return 1
+    else:
+        return 2
 
-# 随机选择一个代理
-def random_ip():
-    num = random.randint(0,4) #随机选一个0到4的整数
-    # 注意代理池可能需要更新
-    ip_pool=[{},{"http" : "118.190.95.35:9001"},{"http":"106.75.164.15:3128"},{"http":"115.46.64.105:8123"},{"http":"61.138.33.20:808"}]
-    return ip_pool[num]
-
-# 将json字典写入csv
-def detectface(table_result, img, files_name):
+def useapi(url):
     try:
-        parsed = useapi(img)
-        if not parsed['faces']:
-            print('This picture do not have any face')
-        else:
-            if len(parsed['faces']) <= 5:  # face++免费版只能识别最多5张人脸
-                parsed2 = parsed['faces']
-            else:
-                parsed2 = parsed['faces'][0:5]
-            write_db(table_result, parsed2, files_name)
-            print('The faces of this picture were gotten')
+        parsed = api.detect(image_url=url, return_attributes="gender,age,emotion,beauty,smiling,ethnicity,skinstatus")
+        return parsed
     except Exception as e:
-        print(e)
-        if ('parsed' in vars()):
-            print(parsed['error_message'])
-            if parsed['error_message'] == 'IMAGE_ERROR_UNSUPPORTED_FORMAT: image_file':
-                print("图片有问题，跳过")
-                return temp_data
-        print('超过了并发数！等一下！')
-        time.sleep(3)
-        print('The program is going to work')
-        detectface(img, temp_data, files_name)
+        if e.code==403:
+            if 'CONCURRENCY_LIMIT_EXCEEDED' in eval(e.body.decode())['error_message']:
+                print('并发数超过限制')
+                time.sleep(3)
+                parsed = useapi(url)
+                return parsed
+        elif e.code==400:
+            if 'IMAGE_FILE_TOO_LARGE' in eval(e.body.decode())['error_message']:
+                print('图片太大，请更换')
+                return 1
+            elif 'INVALID_IMAGE_SIZE' in eval(e.body.decode())['error_message']:
+                print('客户上传的图像像素尺寸太大或太小')
+                return 1
+            elif 'INVALID_IMAGE_URL' in eval(e.body.decode())['error_message']:
+                print('图片URL错误或者无效')
+                return 1
+            elif 'IMAGE_ERROR_UNSUPPORTED_FORMAT' in eval(e.body.decode())['error_message']:
+                print('图像无法正确解析，有可能不是一个图像文件、或有数据破损、或图片文件格式不符合要求')
+                return 1
+            else:
+                print('error code:',e.code)
+                print(e.body)
+                return 2
+        elif e.code==-1: # 在云主机运行不知道为什么会有error code = -1,但是值还是在的，所以才有这一块
+            parsed=json.loads(e.body[27:-1])
+            return parsed
+        else:
+            print('error code:',e.code)
+            print(e.body)
+            return 2
+
+# 整理返回的信息
+def detectface(row):
+    url=row['img_large']
+    parsed=useapi(url)
+    print(parsed)
+    if parsed == 1:
+        url=row['img']
+        parsed=useapi(url)
+        if (parsed == 1) or (parsed == 2):
+            print('图片无效，跳过')
+            ins2="INSERT INTO pic_id VALUES (null, '%s')"%row['pid']
+            cur1.execute(ins2)
+            conn1.commit()
+            return False
+    elif parsed == 2:
+        print('图片无效，跳过')
+        ins2="INSERT INTO pic_id VALUES (null, '%s')"%row['pid']
+        cur1.execute(ins2)
+        conn1.commit()
+        return False
+    else:
+        pass
+
+    if not parsed['faces']:
+        print('This picture do not have any face')
+        ins2="INSERT INTO pic_id VALUES (null, '%s')"%row['pid']
+        cur1.execute(ins2)
+        conn1.commit()
+        return False
+
+    if len(parsed['faces']) <= 5:  # face++免费版只能识别最多5张人脸
+        parsed2 = parsed['faces']
+    else:
+        parsed2 = parsed['faces'][0:5]
+    write_db(parsed2,row)
+    return True
 
 
-def write_db(table_result, parsed2, files_name):
+def getinfo(row):
+    pid=row['pid']
+    sel='select weibo.time, weibo.created_time, weibo.place from weibo join pic join picweibo on weibo.weibo_id=picweibo.weibo_id and picweibo.pid=pic.pid where pic.pid="%s"'%pid
+    cur2.execute(sel)
+    info=cur2.fetchall()[0]
+    place=info[2]
+
+    # 处理时间
+    t=info[0]
+    ct=info[1]
+    t_list=t.split('-')
+    if ct[-3:] == '小时前':
+        temp_h=int(t_list[3])-int(ct[:-3])
+        if temp_h >= 0:
+            h = temp_h
+            d = int(t_list[2])
+        else:
+            h = 24-temp_h
+            d = int(t_list[2])-1
+        y = int(t_list[0])
+        mon = int(t_list[1])
+        min = int(t_list[4])
+        s = int(t_list[5])
+    elif ct[-3:] == '分钟前':
+        # 分钟就忽略不计了
+        y = int(t_list[0])
+        mon = int(t_list[1])
+        d = int(t_list[2])
+        h = int(t_list[3])
+        min = int(t_list[4])
+        s = int(t_list[5])
+    elif ct.count('-') == 1:
+        # '11-10'这种格式的
+        ct_list=ct.split('-')
+        y = int(t_list[0])
+        mon = int(ct_list[0])
+        d = int(ct_list[1])
+        h = int(t_list[3])
+        min = int(t_list[4])
+        s = int(t_list[5])
+    elif ct.count('-') == 2:
+        # '2014-12-11'这种格式的
+        ct_list=ct.split('-')
+        y = int(ct_list[0])
+        mon = int(ct_list[1])
+        d = int(ct_list[2])
+        h = int(t_list[3])
+        min = int(t_list[4])
+        s = int(t_list[5])
+    elif ct[:2] == '昨天':
+        ct_list=ct.split(' ')
+        ct_list=ct_list[1].split(':')
+        y = int(t_list[0])
+        mon = int(t_list[1])
+        d = int(t_list[2])-1
+        h = int(ct_list[0])
+        min = int(ct_list[1])
+        s = int(t_list[5])
+    elif ct=='刚刚':
+        y = int(t_list[0])
+        mon = int(t_list[1])
+        d = int(t_list[2])
+        h = int(t_list[0])
+        min = int(t_list[1])
+        s = int(t_list[5])
+    else:
+        # 暂时还想不到有什么其他情况
+        print('time: ',t,'create time:',ct)
+        pass
+
+    daystamp=str(y)+'-'+str(mon)+'-'+str(d)
+    timestamp=str(h)+':'+str(min)+':'+str(s)
+    hourstamp = h + min / 60.0 + s / 3600.0
+
+    return place, daystamp, timestamp, hourstamp
+
+
+def write_db(parsed2,row):
     for list_item in parsed2:
-        temp = [0 for i in range(24)]  # 初始化一行，一共有24列
         # 写入文件名
-        temp[0] = files_name
+        temp = [0 for i in range(25)]  # 初始化一行，一共有25列
+
+        place, daystamp, timestamp, hourstamp = getinfo(row)
+        # 写入文件名
+        temp[0] = row['pid']
 
         # 写入时间戳
-        daystamp, timestamp, hourstamp = gettimestamp(img)
         temp[1] = daystamp
         temp[2] = timestamp
         temp[3] = hourstamp
@@ -99,119 +215,138 @@ def write_db(table_result, parsed2, files_name):
         temp[21] = list_item['attributes']['skinstatus']['stain']
         temp[22] = list_item['attributes']['skinstatus']['acne']
         temp[23] = list_item['attributes']['skinstatus']['dark_circle']
-        temp_row=tuple(temp)
-        ins="INSERT INTO %s(PhotoName, daystamp, timestamp, hourstamp,faceID, age, gender, ethnicity, sadness,\
-                 neutral,disgust, anger, surprise, fear, happiness, emotion,smile_threshold,smile_value,\
-                 beauty_male,beauty_female,health,stain,acne,dark_circle) VALUES %s" %(table_result, str(temp_row))
-        cursor.execute(ins)
-        conn.commit()
-
-    print('Success! The pic ' + str(files_name) + ' was detected!')
+        temp[24] = place
+        ins="INSERT INTO sample VALUES (null,"+",".join(["'%s'" %x for x in temp])+",null)"
+        cur1.execute(ins)
+        ins2="INSERT INTO pic_id VALUES (null, '%s')"%temp[0]
+        cur1.execute(ins2)
+        conn1.commit()
 
 
-# 获取时间戳
-def gettimestamp(img):
-    img2 = io.BytesIO(img) # 将图片由二进制转换为ByteIO类型
-    tags = exifread.process_file(img2)
-    date=tags["EXIF DateTimeOriginal"].printable
-    daystamp, timestamp=date.split()
-    h,m,s=timestamp.split(':')
-    h = int(h)
-    m = int(m)
-    s = int(s)
-    hourstamp = h + m / 60.0 + s / 3600.0
-    return daystamp, timestamp, hourstamp
+def createtable():
+    create_t='''
+    CREATE TABLE IF NOT EXISTS sample (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
+        pid TEXT,
+        daystamp TEXT,
+        timestamp TEXT,
+        hourstamp REAL,
+        faceID TEXT,
+        age INTEGER,
+        gender TEXT,
+        ethnicity TEXT,
+        sadness REAL,
+        neutral REAL,
+        disgust REAL,
+        anger REAL,
+        surprise REAL,
+        fear REAL,
+        happiness REAL,
+        emotion INTEGER,
+        smile_threshold INTEGER,
+        smile_value REAL,
+        beauty_male REAL,
+        beauty_female REAL,
+        health REAL,
+        stain REAL,
+        acne REAL,
+        dark_circle REAL,
+        place TEXT,
+        tag INTEGER
+    )
+    '''
+    cur1.execute(create_t)
+    create_t2='''
+    CREATE TABLE IF NOT EXISTS pic_id (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
+        pid TEXT
+    )
+    '''
+    cur1.execute(create_t2)
+    conn1.commit()
 
-# 连接云mysql
-def connectsql():
-    try:
-        conn=pymysql.connect(host = '172.27.0.11',  # 远程主机的ip地址，
-                             user = 'root',   # MySQL用户名
-                             db = 'emotion_part2',   # database名
-                             passwd = 'hyj123456',   # 数据库密码
-                             port = 3306,  #数据库监听端口，默认3306
-                             charset = "utf8")  #指定utf8编码的连接
-    except Exception as e:
-        print(e)
-    else:
-        print('Connect success!')
-        cursor = conn.cursor()
-        return conn,cursor
+def main():
+    global conn1,cur1,conn2,cur2,api,yag
+    # 创建使用facepp的实例
+    API_KEY = 'TmBJ_UuRJyow1PWIjH6iIA3_25a_CIvp'
+    API_SECRET = 'DndanQWy_q2ZIp7iMjMCSIkmdJU6V3Tl'
+
+    emailname=None
+    emailpassword=None
+
+    api=API(API_KEY,API_SECRET)
+    # 登录你的邮箱
+    yag = yagmail.SMTP(user =emailname, password =emailpassword, host = 'smtp.qq.com')
+
+
+    # 连接数据库
+    conn1 = sqlite3.connect('emotion.sqlite')
+    cur1 = conn1.cursor()
+    conn2 = sqlite3.connect('weibo.sqlite')
+    cur2 = conn2.cursor()
+    print('数据库连接成功!')
+
+    # 初始化数据库
+    createtable()
+
+    # 获取所有待识别的照片的数量
+    pic_pd = pandas.read_sql_query("SELECT * FROM pic",conn2) # 所有的照片信息
+    emotion_pd = pandas.read_sql_query("SELECT * FROM pic_id",conn1) #已经识别了的照片信息
+    pid_al = list(pic_pd['pid'].values) # 所有的照片编码
+    pid_rl = list(emotion_pd['pid'].values) # 已经识别了的照片编码
+    pid_nl = list(set(pid_al)-set(pid_rl)) # 待识别的照片编码
+    pic_pd_part = pic_pd[pic_pd.pid.isin(pid_nl)] # 待识别的照片信息
+    n = pic_pd_part.shape[0]
+    print('全部有{}张照片，已经识别了{}张，还剩{}张'.format(len(pid_al), len(pid_rl), len(pid_nl)))
+
+    print('************************准备识别%s张图片************************'%str(n))
+    for i in range(n):
+        print('正在准备识别第%s张图片'%str(i+1))
+
+        temp_row=pic_pd_part.iloc[i]
+
+        # 判断图片是否在数据库中
+        pid = temp_row['pid']
+        sel='select pid from sample where pid="%s"'%pid
+        cur1.execute(sel)
+        flag=cur1.fetchall()
+
+        if len(flag)>0:
+            print('这张图片识别过了！跳过！')
+            continue
+
+        # 判断图片格式
+        if temp_row['img'][-3:] == 'gif':
+            print('图片格式不对，跳过')
+            print(temp_row['img'])
+            continue
+
+        detectface(temp_row)
+        print('第%s张已经成功检测并写入'%str(i))
+
+    print('目前所有的照片情绪都识别完了，休息三个小时再继续。')
+    yag.send(to = [emailname], subject = '情绪识别完毕', contents = ['目前所有的照片情绪都识别完了，休息三个小时再继续。'])
+
+    # 关闭数据库
+    cur1.close()
+    cur2.close()
+    conn1.close()
+    conn2.close()
+    print('数据库已关闭')
+
 
 if __name__ == '__main__':
-    try:
-        # 登录你的邮箱
-        yag = yagmail.SMTP(user = 'your email', password = 'your password', host = 'smtp.qq.com')
+    while True:
+        try:
 
-        conn, cursor = connectsql()
-        # 获取数据库中的表名
-        cursor.execute("SELECT TABLE_NAME from information_schema.`TABLES` where TABLE_SCHEMA = 'emotion_part2'")
-        table_list=cursor.fetchall()
-        for table in table_list:
-            table_name=table[0]
-            if table_name =='machine10':
-                continue
-            print('Let us start dealing with table ' + table_name)
+            main()
 
-            table_result = table_name+'_result'
+            time.sleep(10800) # 休息三个小时
+        except:
+            e = traceback.format_exc()
 
-            # 判断表是否存在，存在的话就接着写，不存在的话，就要先创建一个表
-            create_t=r'''
-            CREATE TABLE IF NOT EXISTS %s (
-                id INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT UNIQUE,
-                PhotoName TEXT,
-                daystamp TEXT,
-                timestamp TEXT,
-                hourstamp DOUBLE,
-                faceID TEXT,
-                age TINYINT,
-                gender TEXT,
-                ethnicity TEXT,
-                sadness DOUBLE,
-                neutral DOUBLE,
-                disgust DOUBLE,
-                anger DOUBLE,
-                surprise DOUBLE,
-                fear DOUBLE,
-                happiness DOUBLE,
-                emotion TINYINT,
-                smile_threshold TINYINT,
-                smile_value DOUBLE,
-                beauty_male DOUBLE,
-                beauty_female DOUBLE,
-                health DOUBLE,
-                stain DOUBLE,
-                acne DOUBLE,
-                dark_circle DOUBLE
-            )
-            '''%table_result
-            cursor.execute(create_t)
+            # 要是报错了，就发邮件然后退出
+            print(e)
+            yag.send(to = ['924154233@qq.com'], subject = '情绪识别 Break!!!!!', contents = [e])
 
-            # 遍历每个table里的图片
-            cursor.execute("SELECT Count(*) FROM %s"%table_name)
-            l = cursor.fetchall()[0][0]
-            if table_name == 'machine11':
-                s = 41
-            else:
-                s = 1
-            for i in range(s,l+1):
-                select_data=r"SELECT * FROM %s Where Id = %s"%(table_name ,str(i))
-                cursor.execute(select_data)
-                img_tuple = cursor.fetchall()
-
-                img_name = img_tuple[0][1]
-                img = img_tuple[0][2]
-                print('Now, the program is going to deal with ' + table_name + ' pic' + img_name)
-
-                detectface(table_result, img, img_name)
-            # 发送邮件
-            yag.send(to = ['924154233@qq.com'], subject = 'the table %s is done'%table_name, contents = ['table done!'])
-
-        print('All done!')
-        cursor.close()
-        conn.close()
-    except Exception as e:
-        print(e)
-        # 要是报错了，就发邮件然后退出
-        yag.send(to = ['接受邮箱'], subject = 'Break!!!!!', contents = [''])
-        sys.exit(1)
+            break
