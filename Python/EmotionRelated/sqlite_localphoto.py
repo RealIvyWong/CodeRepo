@@ -21,9 +21,10 @@ db_path = 'photo.sqlite'
 
 def uploadimg(folder,filename,photo,photo_resize):
     try:
-        add_row="INSERT INTO pic(PhotoName, daystamp, timestamp, hourstamp, place, Data) VALUES(?,?,?,?,?,?)"
+        add_row="INSERT INTO pic(PhotoName, daystamp, timestamp, hourstamp, place, pid, Data) VALUES(?,?,?,?,?,?,?)"
         daystamp, timestamp, hourstamp = gettimestamp(photo)
-        cur.execute(add_row, (filename, daystamp, timestamp, hourstamp, folder, photo_resize))
+        pid=folder+'-'+filename
+        cur.execute(add_row, (filename, daystamp, timestamp, hourstamp, folder,pid, photo_resize))
         conn.commit()
     except Exception as e:
         print(e)
