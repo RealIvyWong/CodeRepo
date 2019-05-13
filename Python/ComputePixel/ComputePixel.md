@@ -1,6 +1,6 @@
 # ComputePixel
 
-ComputePixel的主要功能是实现计算图片中的各个颜色的像素的数量与占比。
+ComputePixel的主要功能是实现计算图片中的各个颜色的像素的数量。
 
 
 
