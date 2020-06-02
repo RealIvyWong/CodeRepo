@@ -347,6 +347,6 @@ if __name__ == '__main__':
 
             # 要是报错了，就发邮件然后退出
             print(e)
-            yag.send(to = ['924154233@qq.com'], subject = '情绪识别 Break!!!!!', contents = [e])
+            yag.send(to = ['********@qq.com'], subject = '情绪识别 Break!!!!!', contents = [e])
 
             break
