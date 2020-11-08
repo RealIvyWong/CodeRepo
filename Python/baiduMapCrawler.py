@@ -17,7 +17,7 @@ import requests,json
 import time,sys
 
 ############### 自主设置区 ###############
-ak = '8AgtU92Xa9ZQIDYcex3tTeGzHtOpN3On' #API key
+ak = 'your key' #API key
 keyword="中学"
 keyword2="网吧"
 radius=500
